@@ -1,0 +1,157 @@
+---
+title: "M05-Visualizing Data with Tables"
+author: "Daisy Hernandez"
+date: '`r format(Sys.time())`'
+format: 
+  html: 
+    toc: true
+    toc-depth: 3
+    number-sections: true
+    code-link: true
+    code-fold: show
+    code-tools: true
+    code-overflow: wrap
+    embed-resources: true
+editor: visual
+execute: 
+  freeze: auto
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+# Reflection Essay {#sec-essay}
+
+::: callout-note
+**Prompt:** Summarize what you learned from the videos you watched. What did you like about the `gt` and `gtExtra` packages demonstrated in the videos? How do tables complement charts for data visualization? Under what circumstances would you prefer to use tables rather than charts to visualize data?
+:::
+
+This module's videos walked through how the `gt` package turns a plain data frame into a polished, presentation-ready table by layering on titles, spanner labels, footnotes, and source notes, while `gtExtra` builds on top of that with pre-built themes and inline mini-visuals like sparklines and bar charts embedded directly in table cells. What stood out most was how much control `gt` gives over labeling and formatting without writing custom HTML or CSS by hand.
+
+I liked that `gtExtra` in particular makes it fast to add things like inline bar charts (`gt_plt_bar`) or sparklines (`gt_plt_sparkline`) directly into a cell, which lets a single table communicate both an exact value and a trend at a glance. That combination is something a static chart alone cannot do as compactly.
+
+> Tables and charts complement each other because charts are best at showing overall patterns, trends, and relative comparisons at a glance, while tables are best at communicating precise, individual values that a reader may need to look up, audit, or cite directly.
+
+I would prefer a table over a chart when the audience needs exact numbers (e.g., dollar figures for a budget review), when there are many categories that would clutter a chart legend, or when the report needs to double as a reference document rather than just a visual takeaway.
+
+# Building a gt/gtExtra Table {#sec-table}
+
+## Load Packages and Data
+
+```{r libraries}
+library(tidyverse)
+library(gt)
+library(gtExtras)
+```
+
+```{r data}
+# Synthetic direct-mail marketing dataset, from this week's lecture
+# (jaejungca.github.io/recipes, W02 — Data Splitting and Preprocessing)
+set.seed(123)
+n <- 3000
+
+customer_data <- tibble(
+  customer_id = paste0("C", str_pad(1:n, 5, pad = "0")),
+  age = round(rnorm(n, mean = 45, sd = 12)),
+  income = round(rlnorm(n, meanlog = 10.8, sdlog = 0.6)), # right-skewed
+  recency_days = round(rexp(n, rate = 1 / 60)), # days since last purchase
+  freq_12mo = rpois(n, lambda = 3), # purchases in 12 months
+  avg_order_amt = round(rlnorm(n, meanlog = 4.2, sdlog = 0.5), 2),
+  channel = sample(
+    c("email", "direct_mail", "digital"),
+    n, replace = TRUE, prob = c(0.5, 0.3, 0.2)
+  ),
+  region = sample(c("West", "South", "Midwest", "Northeast"), n, replace = TRUE),
+  loyalty_tier = sample(
+    c("Bronze", "Silver", "Gold", "Platinum"),
+    n, replace = TRUE, prob = c(0.4, 0.3, 0.2, 0.1)
+  ),
+  responded = rbinom(
+    n, 1,
+    prob = plogis(
+      -3 +
+        0.02 * (age - 45) +
+        0.3 * log(income / 50000) +
+        0.1 * freq_12mo -
+        0.005 * recency_days
+    )
+  )
+) |>
+  mutate(
+    income = if_else(runif(n) < 0.08, NA_real_, income),
+    avg_order_amt = if_else(runif(n) < 0.05, NA_real_, avg_order_amt),
+    responded = factor(responded, levels = c(1, 0), labels = c("yes", "no"))
+  )
+```
+
+## Wrangle Data
+
+```{r wrangle}
+summary_table <- customer_data %>%
+  group_by(region, loyalty_tier) %>%
+  summarise(
+    avg_income = mean(income, na.rm = TRUE),
+    avg_order = mean(avg_order_amt, na.rm = TRUE),
+    avg_freq = mean(freq_12mo),
+    response_rate = mean(responded == "yes"),
+    n_customers = n(),
+    .groups = "drop"
+  ) %>%
+  arrange(region, loyalty_tier)
+```
+
+## Build the Table
+
+```{r gt-table}
+summary_table %>%
+  gt(groupname_col = "region", rowname_col = "loyalty_tier") %>%
+  gt_theme_espn() %>%
+  tab_header(
+    title = "Customer Profile and Response Rate by Region and Loyalty Tier",
+    subtitle = "Synthetic direct-mail dataset — M05 Table Visualization"
+  ) %>%
+  tab_stubhead(label = "Region / Loyalty Tier") %>%
+  cols_label(
+    avg_income = "Avg. Income",
+    avg_order = "Avg. Order Amount",
+    avg_freq = "Avg. Purchases (12mo)",
+    response_rate = "Response Rate",
+    n_customers = "# Customers"
+  ) %>%
+  tab_spanner(
+    label = "Purchase Behavior",
+    columns = c(avg_order, avg_freq)
+  ) %>%
+  fmt_currency(columns = c(avg_income, avg_order), currency = "USD", decimals = 2) %>%
+  fmt_number(columns = avg_freq, decimals = 2) %>%
+  fmt_percent(columns = response_rate, decimals = 1) %>%
+  data_color(
+    columns = response_rate,
+    colors = scales::col_numeric(
+      palette = c("#FDE0DD", "#C51B8A"),
+      domain = NULL
+    )
+  ) %>%
+  tab_source_note(source_note = "Source: Synthetic direct-mail dataset, IBM 6540 W02 lecture materials (jaejungca.github.io/recipes).") %>%
+  tab_footnote(
+    footnote = "Response rate = share of customers in that segment who responded 'yes' to the direct-mail campaign.",
+    locations = cells_column_labels(columns = response_rate)
+  ) %>%
+  tab_options(
+    table.font.size = px(13),
+    heading.title.font.size = px(20)
+  )
+```
+
+# Why This Table Matters for the MSDM Project {#sec-relevance}
+
+::: callout-note
+**Prompt:** Explain why the table is worth adding to your MSDM project written report or presentation slides.
+:::
+
+A table like this earns a place in the MSDM project report because it lets a stakeholder audit exact figures (spend, visit frequency, satisfaction) by segment rather than eyeballing bar heights, which matters when the same numbers may inform a budget or targeting decision. It also compresses several metrics and segments into one reference-friendly object instead of requiring three or four separate charts, which keeps the report tighter without losing the underlying detail.
+
+# Published GitHub Page {#sec-publish}
+
+*Add your published GitHub Pages URL here after publishing the rendered HTML.*
