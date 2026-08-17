@@ -154,4 +154,4 @@ A table like this earns a place in the MSDM project report because it lets a sta
 
 # Published GitHub Page {#sec-publish}
 
-*Add your published GitHub Pages URL here after publishing the rendered HTML.*
+<https://daisyxhernandez20-oss.github.io/m05-table-viz/>
